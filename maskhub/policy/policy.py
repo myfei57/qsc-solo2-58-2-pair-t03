@@ -22,6 +22,7 @@ class Policy:
     datasets: tuple[str, ...]
     rules: tuple[str, ...]
     state: str = PolicyState.DRAFT.value
+    snapshot: str = ""
 
     def __post_init__(self) -> None:
         if not self.identifier.strip():
@@ -32,6 +33,8 @@ class Policy:
             raise ValueError("policy must reference at least one rule")
         if self.state not in {item.value for item in PolicyState}:
             raise ValueError(f"unknown policy state {self.state!r}")
+        if not isinstance(self.snapshot, str):
+            raise ValueError("policy snapshot must be a string")
 
     @property
     def state_enum(self) -> PolicyState:
@@ -43,6 +46,16 @@ class Policy:
             datasets=self.datasets,
             rules=self.rules,
             state=state.value,
+            snapshot=self.snapshot,
+        )
+
+    def with_snapshot(self, snapshot: str) -> "Policy":
+        return Policy(
+            identifier=self.identifier,
+            datasets=self.datasets,
+            rules=self.rules,
+            state=self.state,
+            snapshot=snapshot,
         )
 
     def covers(self, dataset: str) -> bool:
@@ -54,6 +67,7 @@ class Policy:
             "datasets": list(self.datasets),
             "rules": list(self.rules),
             "state": self.state,
+            "snapshot": self.snapshot,
         }
 
     @classmethod
@@ -64,9 +78,12 @@ class Policy:
         datasets = payload.get("datasets")
         rules = payload.get("rules")
         state = payload.get("state", PolicyState.DRAFT.value)
+        snapshot = payload.get("snapshot", "")
         if not isinstance(identifier, str) or not isinstance(state, str):
             return None
         if not isinstance(datasets, list) or not isinstance(rules, list):
+            return None
+        if not isinstance(snapshot, str):
             return None
         try:
             return cls(
@@ -74,6 +91,7 @@ class Policy:
                 datasets=tuple(str(item) for item in datasets),
                 rules=tuple(str(item) for item in rules),
                 state=state,
+                snapshot=snapshot,
             )
         except ValueError:
             return None

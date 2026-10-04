@@ -33,7 +33,7 @@ class PolicyRegistry:
             raise NotFound(f"unknown policy {identifier}")
         return policy
 
-    def activate(self, identifier: str) -> Policy:
+    def activate(self, identifier: str, snapshot: str = "") -> Policy:
         policy = self.get(identifier)
         for other in self.all():
             if other.identifier == identifier:
@@ -44,7 +44,7 @@ class PolicyRegistry:
                 raise Conflict(
                     f"policy {other.identifier} already serves {sorted(set(other.datasets) & set(policy.datasets))}"
                 )
-        activated = policy.with_state(PolicyState.ACTIVE)
+        activated = policy.with_state(PolicyState.ACTIVE).with_snapshot(snapshot)
         self._store.put_json(policy_key(identifier), activated.as_dict())
         return activated
 

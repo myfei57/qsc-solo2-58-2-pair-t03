@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 
-from maskhub.console.handlers import audit, catalog, policy, rule, source, system
+from maskhub.console.handlers import audit, catalog, policy, rule, snapshot, source, system
 from maskhub.console.http import Request, Response
 from maskhub.console.router import Router
 
@@ -28,6 +28,7 @@ def build_router(runtime) -> Router:
     router.post("/rules", bind(rule.create_rule, runtime))
     router.post("/rule/remove", bind(rule.remove_rule, runtime))
     router.post("/rule/match", bind(rule.match_rule, runtime))
+    router.post("/rule/resolve", bind(rule.resolve_rule, runtime))
 
     router.get("/policies", bind(policy.list_policies, runtime))
     router.post("/policies", bind(policy.create_policy, runtime))
@@ -35,6 +36,11 @@ def build_router(runtime) -> Router:
     router.post("/policy/retire", bind(policy.retire_policy, runtime))
     router.post("/policy/coverage", bind(policy.policy_coverage, runtime))
     router.get("/policy/gaps", bind(policy.coverage_gap, runtime))
+    router.post("/dataset/resolve", bind(policy.resolve_dataset, runtime))
+
+    router.get("/snapshots", bind(snapshot.list_snapshots, runtime))
+    router.get("/snapshot", bind(snapshot.get_snapshot, runtime))
+    router.post("/snapshot/explain", bind(snapshot.explain_snapshot, runtime))
 
     router.get("/audit", bind(audit.list_audit, runtime))
     router.get("/audit/summary", bind(audit.audit_summary, runtime))

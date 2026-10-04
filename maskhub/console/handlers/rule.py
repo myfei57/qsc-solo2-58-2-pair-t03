@@ -5,6 +5,7 @@ from __future__ import annotations
 from maskhub.console.http import Request, Response
 from maskhub.console.validation import optional_text, require_text
 from maskhub.errors import InvalidRequest
+from maskhub.rule.adjudication import adjudicate_all
 from maskhub.rule.rule import Rule
 
 
@@ -18,11 +19,15 @@ def create_rule(runtime, request: Request) -> Response:
     parameters = payload.get("parameters", {})
     if not isinstance(parameters, dict):
         raise InvalidRequest("parameters must be an object")
+    priority = payload.get("priority", 0)
+    if isinstance(priority, bool) or not isinstance(priority, int):
+        raise InvalidRequest("priority must be an integer")
     rule = Rule(
         identifier=require_text(payload, "identifier"),
         field_pattern=require_text(payload, "field_pattern"),
         action=require_text(payload, "action"),
         parameters=parameters,
+        priority=priority,
     )
     runtime.rules.add(rule)
     runtime.journal.append("rule.create", rule.identifier, rule.action)
@@ -44,3 +49,17 @@ def match_rule(runtime, request: Request) -> Response:
         raise InvalidRequest("fields must be a non-empty list")
     names = [require_text({"name": item}, "name") for item in fields]
     return Response.json(200, {"matches": runtime.rules.matching(names)})
+
+
+def resolve_rule(runtime, request: Request) -> Response:
+    """Adjudicate each field against the live rules, explaining every outcome."""
+
+    payload = request.json_object()
+    fields = payload.get("fields")
+    if not isinstance(fields, list) or not fields:
+        raise InvalidRequest("fields must be a non-empty list")
+    names = [require_text({"name": item}, "name") for item in fields]
+    decisions = adjudicate_all(names, runtime.rules.all())
+    return Response.json(
+        200, {"decisions": [decision.as_dict() for decision in decisions]}
+    )

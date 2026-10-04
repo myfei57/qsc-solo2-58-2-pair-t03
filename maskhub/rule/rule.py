@@ -14,6 +14,7 @@ class Rule:
     field_pattern: str
     action: str
     parameters: dict[str, object]
+    priority: int = 0
 
     def __post_init__(self) -> None:
         if not self.identifier.strip():
@@ -22,6 +23,8 @@ class Rule:
             raise ValueError("rule field pattern is required")
         if self.action not in SUPPORTED_ACTIONS:
             raise ValueError(f"unsupported action {self.action!r}")
+        if isinstance(self.priority, bool) or not isinstance(self.priority, int):
+            raise ValueError("rule priority must be an integer")
 
     def matches(self, field_name: str) -> bool:
         return fnmatch.fnmatchcase(field_name.lower(), self.field_pattern.lower())
@@ -32,6 +35,7 @@ class Rule:
             "field_pattern": self.field_pattern,
             "action": self.action,
             "parameters": self.parameters,
+            "priority": self.priority,
         }
 
     @classmethod
@@ -42,6 +46,7 @@ class Rule:
         pattern = payload.get("field_pattern")
         action = payload.get("action")
         parameters = payload.get("parameters", {})
+        priority = payload.get("priority", 0)
         if not isinstance(identifier, str) or not isinstance(pattern, str):
             return None
         if not isinstance(action, str) or not isinstance(parameters, dict):
@@ -52,6 +57,7 @@ class Rule:
                 field_pattern=pattern,
                 action=action,
                 parameters=parameters,
+                priority=priority,
             )
         except ValueError:
             return None

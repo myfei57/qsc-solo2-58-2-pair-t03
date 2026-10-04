@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from maskhub.console.http import Request, Response
 from maskhub.console.validation import require_text, require_text_list
-from maskhub.errors import NotFound
+from maskhub.errors import Conflict, NotFound
 from maskhub.policy.coverage import check_coverage
 from maskhub.policy.policy import Policy
+from maskhub.rule.adjudication import adjudicate_all
 
 
 def list_policies(runtime, request: Request) -> Response:
@@ -33,9 +34,17 @@ def create_policy(runtime, request: Request) -> Response:
 def activate_policy(runtime, request: Request) -> Response:
     payload = request.json_object()
     identifier = require_text(payload, "identifier")
-    policy = runtime.policies.activate(identifier)
-    runtime.journal.append("policy.activate", identifier, ",".join(policy.datasets))
-    return Response.json(200, policy.as_dict())
+    policy = runtime.policies.get(identifier)
+    snapshot = runtime.snapshots.capture(
+        policy, [runtime.rules.get(rule_id) for rule_id in policy.rules]
+    )
+    activated = runtime.policies.activate(identifier, snapshot.identifier)
+    runtime.journal.append(
+        "policy.activate",
+        identifier,
+        f"snapshot={snapshot.identifier} datasets={','.join(activated.datasets)}",
+    )
+    return Response.json(200, activated.as_dict())
 
 
 def retire_policy(runtime, request: Request) -> Response:
@@ -44,6 +53,39 @@ def retire_policy(runtime, request: Request) -> Response:
     policy = runtime.policies.retire(identifier)
     runtime.journal.append("policy.retire", identifier, policy.state)
     return Response.json(200, policy.as_dict())
+
+
+def resolve_dataset(runtime, request: Request) -> Response:
+    """Adjudicate a dataset's sensitive fields against its serving snapshot.
+
+    The decision is replayable: the response names the immutable snapshot
+    whose frozen rules produced it.
+    """
+
+    payload = request.json_object()
+    dataset_id = require_text(payload, "dataset")
+    dataset = runtime.datasets.get(dataset_id)
+    policy = next(
+        (item for item in runtime.policies.serving() if item.covers(dataset_id)), None
+    )
+    if policy is None:
+        raise NotFound(f"no active policy serves dataset {dataset_id}")
+    if not policy.snapshot:
+        raise Conflict(
+            f"policy {policy.identifier} has no rule snapshot; re-activate it to capture one"
+        )
+    snapshot = runtime.snapshots.get(policy.snapshot)
+    names = [item.name for item in dataset.masked_fields()]
+    decisions = adjudicate_all(names, snapshot.rules)
+    return Response.json(
+        200,
+        {
+            "dataset": dataset.identifier,
+            "policy": policy.identifier,
+            "snapshot": snapshot.identifier,
+            "decisions": [decision.as_dict() for decision in decisions],
+        },
+    )
 
 
 def policy_coverage(runtime, request: Request) -> Response:
