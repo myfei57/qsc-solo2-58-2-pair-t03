@@ -33,7 +33,7 @@ class PolicyRegistry:
             raise NotFound(f"unknown policy {identifier}")
         return policy
 
-    def activate(self, identifier: str) -> Policy:
+    def activate(self, identifier: str, snapshots=None, rules=None) -> Policy:
         policy = self.get(identifier)
         for other in self.all():
             if other.identifier == identifier:
@@ -44,7 +44,13 @@ class PolicyRegistry:
                 raise Conflict(
                     f"policy {other.identifier} already serves {sorted(set(other.datasets) & set(policy.datasets))}"
                 )
-        activated = policy.with_state(PolicyState.ACTIVE)
+
+        snapshot_id = None
+        if snapshots is not None:
+            if rules is None:
+                raise ValueError("rules registry is required when capturing a snapshot")
+            snapshot_id = snapshots.capture(policy.rules, rules).identifier
+        activated = policy.with_state(PolicyState.ACTIVE).with_snapshot(snapshot_id)
         self._store.put_json(policy_key(identifier), activated.as_dict())
         return activated
 

@@ -24,6 +24,20 @@ def optional_text(payload: Mapping[str, Any], key: str, default: str = "") -> st
     return value.strip()
 
 
+def require_bool(payload: Mapping[str, Any], key: str, default: bool) -> bool:
+    value = payload.get(key, default)
+    if not isinstance(value, bool):
+        raise InvalidRequest(f"{key} must be a boolean")
+    return value
+
+
+def require_int(payload: Mapping[str, Any], key: str, default: int) -> int:
+    value = payload.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise InvalidRequest(f"{key} must be an integer")
+    return value
+
+
 def require_text_list(payload: Mapping[str, Any], key: str) -> list[str]:
     value = payload.get(key)
     if not isinstance(value, list) or not value:

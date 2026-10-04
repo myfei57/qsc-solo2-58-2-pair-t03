@@ -8,6 +8,7 @@ from maskhub.audit.journal import Journal
 from maskhub.catalog.dataset import DatasetRegistry
 from maskhub.policy.registry import PolicyRegistry
 from maskhub.rule.registry import RuleRegistry
+from maskhub.rule.snapshot import SnapshotRegistry
 from maskhub.source.registry import SourceRegistry
 from maskhub.store.kvstore import RecordStore
 
@@ -19,6 +20,7 @@ class Runtime:
     sources: SourceRegistry
     datasets: DatasetRegistry
     rules: RuleRegistry
+    snapshots: SnapshotRegistry
     policies: PolicyRegistry
 
 
@@ -29,5 +31,6 @@ def build_runtime(store: RecordStore) -> Runtime:
         sources=SourceRegistry(store),
         datasets=DatasetRegistry(store),
         rules=RuleRegistry(store),
+        snapshots=SnapshotRegistry(store),
         policies=PolicyRegistry(store),
     )

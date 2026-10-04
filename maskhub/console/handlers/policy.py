@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from maskhub.console.http import Request, Response
 from maskhub.console.validation import require_text, require_text_list
-from maskhub.errors import NotFound
+from maskhub.errors import InvalidRequest
 from maskhub.policy.coverage import check_coverage
 from maskhub.policy.policy import Policy
+from maskhub.rule.adjudication import adjudicate
 
 
 def list_policies(runtime, request: Request) -> Response:
@@ -33,8 +34,16 @@ def create_policy(runtime, request: Request) -> Response:
 def activate_policy(runtime, request: Request) -> Response:
     payload = request.json_object()
     identifier = require_text(payload, "identifier")
-    policy = runtime.policies.activate(identifier)
-    runtime.journal.append("policy.activate", identifier, ",".join(policy.datasets))
+    policy = runtime.policies.activate(
+        identifier,
+        snapshots=runtime.snapshots,
+        rules=runtime.rules,
+    )
+    runtime.journal.append(
+        "policy.activate",
+        identifier,
+        f"{','.join(policy.datasets)} snapshot={policy.snapshot_id}",
+    )
     return Response.json(200, policy.as_dict())
 
 
@@ -51,9 +60,42 @@ def policy_coverage(runtime, request: Request) -> Response:
     policy_id = require_text(payload, "policy")
     dataset_id = require_text(payload, "dataset")
     report = check_coverage(
-        policy_id, dataset_id, runtime.policies, runtime.datasets, runtime.rules
+        policy_id,
+        dataset_id,
+        runtime.policies,
+        runtime.datasets,
+        runtime.rules,
+        runtime.snapshots,
     )
     return Response.json(200, report.as_dict())
+
+
+def policy_decide(runtime, request: Request) -> Response:
+    payload = request.json_object()
+    policy_id = require_text(payload, "policy")
+    policy = runtime.policies.get(policy_id)
+    if not policy.snapshot_id:
+        raise InvalidRequest(f"policy {policy.identifier} has no immutable snapshot")
+    fields = payload.get("fields")
+    if not isinstance(fields, list) or not fields:
+        raise InvalidRequest("fields must be a non-empty list")
+    names: list[str] = []
+    for item in fields:
+        if not isinstance(item, str) or not item.strip():
+            raise InvalidRequest("fields entries must be non-empty strings")
+        names.append(item.strip())
+
+    snapshot = runtime.snapshots.get(policy.snapshot_id)
+    rules = [snapshot.rule(rule_id) for rule_id in policy.rules]
+    decisions = {name: adjudicate(name, rules) for name in names}
+    return Response.json(
+        200,
+        {
+            "policy": policy.identifier,
+            "snapshot_id": snapshot.identifier,
+            "matches": {name: decision.as_dict() for name, decision in decisions.items()},
+        },
+    )
 
 
 def coverage_gap(runtime, request: Request) -> Response:
@@ -71,6 +113,7 @@ def coverage_gap(runtime, request: Request) -> Response:
                 runtime.policies,
                 runtime.datasets,
                 runtime.rules,
+                runtime.snapshots,
             )
             covered.update(report.covered)
         missing = [
